@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	router "github.com/adamz999/dot/internal/router"
+	router "github.com/adamz999/dot/router"
 )
 
 type App struct {

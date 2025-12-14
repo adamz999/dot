@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	context "github.com/adamz999/dot/internal/context"
+	context "github.com/adamz999/dot/context"
 )
 
 type HandlerFunc func(c *context.Context)

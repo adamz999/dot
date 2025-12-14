@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/adamz999/dot/internal/app"
-	ctx "github.com/adamz999/dot/internal/context"
-	router "github.com/adamz999/dot/internal/router"
+	"github.com/adamz999/dot/app"
+	ctx "github.com/adamz999/dot/context"
+	router "github.com/adamz999/dot/router"
 )
 
 func main() {
