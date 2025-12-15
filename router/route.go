@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	context "github.com/adamz999/dot/context"
+	"github.com/adamz999/dot/websocket"
 )
 
 type HandlerFunc func(c *context.Context)
@@ -17,9 +18,10 @@ type Router struct {
 }
 
 type Route struct {
-	Path    string
-	Method  string
-	Handler HandlerFunc
+	Path      string
+	Method    string
+	Handler   HandlerFunc
+	WebSocket bool
 }
 
 func (r *Router) Use(mw Middleware) {
@@ -36,9 +38,10 @@ func (r *Router) applyMiddlewares(h HandlerFunc) HandlerFunc {
 func (r *Router) Get(path string, handler HandlerFunc) {
 	r.Routes = append(r.Routes,
 		Route{
-			Path:    path,
-			Method:  http.MethodGet,
-			Handler: handler,
+			Path:      path,
+			Method:    http.MethodGet,
+			Handler:   handler,
+			WebSocket: false,
 		},
 	)
 }
@@ -46,9 +49,10 @@ func (r *Router) Get(path string, handler HandlerFunc) {
 func (r *Router) Post(path string, handler HandlerFunc) {
 	r.Routes = append(r.Routes,
 		Route{
-			Path:    path,
-			Method:  http.MethodPost,
-			Handler: handler,
+			Path:      path,
+			Method:    http.MethodPost,
+			Handler:   handler,
+			WebSocket: false,
 		},
 	)
 }
@@ -56,9 +60,10 @@ func (r *Router) Post(path string, handler HandlerFunc) {
 func (r *Router) Put(path string, handler HandlerFunc) {
 	r.Routes = append(r.Routes,
 		Route{
-			Path:    path,
-			Method:  http.MethodPut,
-			Handler: handler,
+			Path:      path,
+			Method:    http.MethodPut,
+			Handler:   handler,
+			WebSocket: false,
 		},
 	)
 }
@@ -66,9 +71,10 @@ func (r *Router) Put(path string, handler HandlerFunc) {
 func (r *Router) Patch(path string, handler HandlerFunc) {
 	r.Routes = append(r.Routes,
 		Route{
-			Path:    path,
-			Method:  http.MethodPatch,
-			Handler: handler,
+			Path:      path,
+			Method:    http.MethodPatch,
+			Handler:   handler,
+			WebSocket: false,
 		},
 	)
 }
@@ -76,9 +82,21 @@ func (r *Router) Patch(path string, handler HandlerFunc) {
 func (r *Router) Delete(path string, handler HandlerFunc) {
 	r.Routes = append(r.Routes,
 		Route{
-			Path:    path,
-			Method:  http.MethodDelete,
-			Handler: handler,
+			Path:      path,
+			Method:    http.MethodDelete,
+			Handler:   handler,
+			WebSocket: false,
+		},
+	)
+}
+
+func (r *Router) WebSocket(path string, handler HandlerFunc) {
+	r.Routes = append(r.Routes,
+		Route{
+			Path:      path,
+			Method:    http.MethodGet,
+			Handler:   handler,
+			WebSocket: true,
 		},
 	)
 }
@@ -140,8 +158,16 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	handler := r.applyMiddlewares(route.Handler)
-	handler(ctx)
+	if route.WebSocket {
+		conn := websocket.UpgradeWebsocket(ctx.Res, ctx.Req)
+		ctx.Connection = conn
+		handler := r.applyMiddlewares(route.Handler)
+		handler(ctx)
+	} else {
+		handler := r.applyMiddlewares(route.Handler)
+		handler(ctx)
+	}
+
 }
 
 func (r *Router) Health() {

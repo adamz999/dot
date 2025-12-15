@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+
+	"github.com/gorilla/websocket"
 )
 
 type Context struct {
@@ -13,6 +15,7 @@ type Context struct {
 	Values     map[string]any
 	Params     map[string]string
 	StatusCode int
+	Connection *websocket.Conn
 }
 
 type headerWrapper struct {
@@ -23,6 +26,10 @@ type cookieWrapper struct {
 	req     *http.Request
 	res     http.ResponseWriter
 	cookies map[string]*http.Cookie
+}
+
+type websocketWrapper struct {
+	Connection *websocket.Conn
 }
 
 func (c *Context) Status(code int) *Context {
@@ -193,4 +200,19 @@ func (c *Context) DecodeBody(obj any) error {
 		return fmt.Errorf("invalid JSON: %w", err)
 	}
 	return nil
+}
+
+func (c *Context) WebSocket() *websocketWrapper {
+	return &websocketWrapper{
+		Connection: c.Connection,
+	}
+}
+
+func (ws *websocketWrapper) Read() ([]byte, error) {
+	_, message, err := ws.Connection.ReadMessage()
+	return message, err
+}
+
+func (ws *websocketWrapper) Write(msg string) error {
+	return ws.Connection.WriteMessage(websocket.TextMessage, []byte(msg))
 }

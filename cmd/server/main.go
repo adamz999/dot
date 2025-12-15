@@ -29,6 +29,14 @@ func main() {
 		c.String(val)
 	})
 
+	r.WebSocket("/ws", func(c *ctx.Context) {
+		msg, err := c.WebSocket().Read()
+		if err != nil {
+			panic(err)
+		}
+		c.WebSocket().Write("cool response" + string(msg))
+	})
+
 	a := app.New(r)
 	a.Start(8080)
 }
