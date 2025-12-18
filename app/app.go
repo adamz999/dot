@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/adamz999/dot/registry"
 	router "github.com/adamz999/dot/router"
 )
 
@@ -13,6 +14,9 @@ type App struct {
 }
 
 func New(router *router.Router) *App {
+	reg := registry.NewServiceRegistry()
+	router.Registry = reg
+
 	return &App{
 		router: router,
 	}
@@ -33,22 +37,17 @@ func (a *App) Start(port int) {
 	}
 }
 
-func printStartupBanner(port string, app *App) {
-	banner := `
-	========================================
-	____   ____ _________
-	|  _ \ |  _ \__   __/
-	| | | || | | | / / 
-	| |_| || |_| |/ /_ 
-	|____/ |____//____|
-
-		Server started!
-		Listening on :%s
-		Routes registered: %d
-	========================================`
-	fmt.Printf(banner, port, len(app.router.Routes))
+func (a *App) Register(dep any) {
+	a.router.Registry.Add(dep)
 }
 
-// easier json encoding for responses
-// middleware
-// path vartiable and req params
+func printStartupBanner(port string, app *App) {
+	banner := `
+
+	Server started
+	Listening on :%s
+	Routes registered: %d
+
+	`
+	fmt.Printf(banner, port, len(app.router.Routes))
+}

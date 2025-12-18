@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 
+	types "github.com/adamz999/dot/params"
 	"github.com/gorilla/websocket"
 )
 
@@ -16,6 +16,7 @@ type Context struct {
 	Params     map[string]string
 	StatusCode int
 	Connection *websocket.Conn
+	RouteID    string
 }
 
 type headerWrapper struct {
@@ -109,37 +110,8 @@ func (c *Context) Redirect(url string, codes ...int) {
 	http.Redirect(c.Res, c.Req, url, code)
 }
 
-func (c *Context) Param(param string) string {
-	val, ok := c.Params[param]
-	if !ok {
-		return ""
-	}
-	return val
-}
-
-func (c *Context) ParamInt(param string) (int, error) {
-	par := c.Param(param)
-	if par == "" {
-		return 0, fmt.Errorf("parameter %q not found", param)
-	}
-
-	parInt, err := strconv.Atoi(par)
-	if err != nil {
-		return 0, fmt.Errorf("parameter %q invalid int: %v", param, err)
-	}
-
-	return parInt, nil
-}
-
-func (c *Context) ParamInt8(param string) (int8, error) {
-	parInt, err := c.ParamInt(param)
-	if err != nil {
-		return 0, err
-	}
-	if parInt < -128 || parInt > 127 {
-		return 0, fmt.Errorf("param %s out of range for int8", param)
-	}
-	return int8(parInt), nil
+func (c *Context) Param(param string) any {
+	return types.GetParsedParam(c.RouteID, param, c.Params[param])
 }
 
 func (h *headerWrapper) Set(key, val string) {
