@@ -10,7 +10,17 @@ import (
 )
 
 type App struct {
-	router *router.Router
+	router     *router.Router
+	startHooks []func()
+	errorHooks []func()
+}
+
+func (a *App) OnServerStart(hook func()) {
+	a.startHooks = append(a.startHooks, hook)
+}
+
+func (a *App) OnServerError(hook func()) {
+	a.errorHooks = append(a.errorHooks, hook)
 }
 
 func New(router *router.Router) *App {
@@ -30,9 +40,16 @@ func (a *App) Start(port int) {
 		panic("router must be created before starting server")
 	}
 
+	for _, hook := range a.startHooks {
+		hook()
+	}
+
 	printStartupBanner(strPort, a)
 
 	if err := http.ListenAndServe(strPort, a.router); err != nil {
+		for _, hook := range a.startHooks {
+			hook()
+		}
 		panic(fmt.Sprintf("server startup failed %v", err))
 	}
 }

@@ -34,6 +34,7 @@ type Route struct {
 }
 
 func (r *Router) Use(mw Middleware) {
+
 	r.middlewares = append(r.middlewares, mw)
 }
 
@@ -49,7 +50,7 @@ func (r *Route) initRouteID() {
 	r.ID = hex.EncodeToString(hash[:4])
 }
 
-func (r *Router) Get(path string, handler HandlerFunc) {
+func (r *Router) Get(path string, handler any) {
 	route := &Route{
 		Path:      path,
 		Method:    http.MethodGet,
@@ -62,7 +63,7 @@ func (r *Router) Get(path string, handler HandlerFunc) {
 	r.Routes = append(r.Routes, *route)
 }
 
-func (r *Router) Post(path string, handler HandlerFunc) {
+func (r *Router) Post(path string, handler any) {
 	route := &Route{
 		Path:      path,
 		Method:    http.MethodPost,
@@ -75,7 +76,7 @@ func (r *Router) Post(path string, handler HandlerFunc) {
 	r.Routes = append(r.Routes, *route)
 }
 
-func (r *Router) Put(path string, handler HandlerFunc) {
+func (r *Router) Put(path string, handler any) {
 	route := &Route{
 		Path:      path,
 		Method:    http.MethodPut,
@@ -88,7 +89,7 @@ func (r *Router) Put(path string, handler HandlerFunc) {
 	r.Routes = append(r.Routes, *route)
 }
 
-func (r *Router) Patch(path string, handler HandlerFunc) {
+func (r *Router) Patch(path string, handler any) {
 	route := &Route{
 		Path:      path,
 		Method:    http.MethodPatch,
@@ -101,7 +102,7 @@ func (r *Router) Patch(path string, handler HandlerFunc) {
 	r.Routes = append(r.Routes, *route)
 }
 
-func (r *Router) Delete(path string, handler HandlerFunc) {
+func (r *Router) Delete(path string, handler any) {
 	route := &Route{
 		Path:      path,
 		Method:    http.MethodDelete,
@@ -114,7 +115,7 @@ func (r *Router) Delete(path string, handler HandlerFunc) {
 	r.Routes = append(r.Routes, *route)
 }
 
-func (r *Router) WebSocket(path string, handler HandlerFunc) {
+func (r *Router) WebSocket(path string, handler any) {
 	route := &Route{
 		Path:      path,
 		Method:    http.MethodGet,
@@ -217,7 +218,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	route, found := r.match(req, ctx)
 	if !found {
 		w.WriteHeader(404)
-		w.Write([]byte("not found"))
+		w.Write([]byte("404 page not found"))
 		return
 	}
 	ctx.RouteID = route.ID
@@ -237,6 +238,22 @@ func (r *Router) Health() {
 		ctx.OK().Body(map[string]string{
 			"status": "ok",
 		})
+	})
+}
+
+func (r *Router) ListRoutes() {
+	r.Get("/routes", func(ctx *context.Context) {
+
+		routes := []map[string]string{}
+
+		for _, route := range r.Routes {
+			routes = append(routes, map[string]string{
+				"path":   route.Path,
+				"method": route.Method,
+				"id":     route.ID,
+			})
+		}
+		ctx.Body(routes)
 	})
 }
 

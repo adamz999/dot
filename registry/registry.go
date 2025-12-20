@@ -19,11 +19,8 @@ func NewServiceRegistry() *ServiceRegistry {
 func (sr *ServiceRegistry) Add(dep any) {
 	sr.mu.Lock()
 	defer sr.mu.Unlock()
-	rtype := reflect.TypeOf(dep)
 
-	if rtype.Kind() == reflect.Pointer {
-		rtype = rtype.Elem()
-	}
+	rtype := reflect.TypeOf(dep)
 	sr.services[rtype] = dep
 }
 
