@@ -3,13 +3,16 @@ package route
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"reflect"
 
 	"github.com/adamz999/dot/context"
 	types "github.com/adamz999/dot/params"
+	"github.com/adamz999/dot/rate"
 	"github.com/adamz999/dot/registry"
 	"github.com/adamz999/dot/websocket"
 )
@@ -19,9 +22,11 @@ type HandlerFunc func(c *context.Context)
 type Middleware func(HandlerFunc) HandlerFunc
 
 type Router struct {
-	Routes      []Route
+	Routes      []*Route
 	middlewares []Middleware
 	Registry    *registry.ServiceRegistry
+	limitted    bool
+	limiter     *rate.GlobalLimiter
 }
 
 type Route struct {
@@ -31,10 +36,11 @@ type Route struct {
 	Handler    any
 	WebSocket  bool
 	ParamTypes []reflect.Type
+	limitted   bool
+	limiter    *rate.GlobalLimiter
 }
 
 func (r *Router) Use(mw Middleware) {
-
 	r.middlewares = append(r.middlewares, mw)
 }
 
@@ -50,7 +56,7 @@ func (r *Route) initRouteID() {
 	r.ID = hex.EncodeToString(hash[:4])
 }
 
-func (r *Router) Get(path string, handler any) {
+func (r *Router) Get(path string, handler any) *Route {
 	route := &Route{
 		Path:      path,
 		Method:    http.MethodGet,
@@ -60,10 +66,11 @@ func (r *Router) Get(path string, handler any) {
 	route.initRouteID()
 	extractTypes(route)
 	r.extractParams(route)
-	r.Routes = append(r.Routes, *route)
+	r.Routes = append(r.Routes, route)
+	return route
 }
 
-func (r *Router) Post(path string, handler any) {
+func (r *Router) Post(path string, handler any) *Route {
 	route := &Route{
 		Path:      path,
 		Method:    http.MethodPost,
@@ -73,10 +80,11 @@ func (r *Router) Post(path string, handler any) {
 	route.initRouteID()
 	extractTypes(route)
 	r.extractParams(route)
-	r.Routes = append(r.Routes, *route)
+	r.Routes = append(r.Routes, route)
+	return route
 }
 
-func (r *Router) Put(path string, handler any) {
+func (r *Router) Put(path string, handler any) *Route {
 	route := &Route{
 		Path:      path,
 		Method:    http.MethodPut,
@@ -86,10 +94,11 @@ func (r *Router) Put(path string, handler any) {
 	route.initRouteID()
 	extractTypes(route)
 	r.extractParams(route)
-	r.Routes = append(r.Routes, *route)
+	r.Routes = append(r.Routes, route)
+	return route
 }
 
-func (r *Router) Patch(path string, handler any) {
+func (r *Router) Patch(path string, handler any) *Route {
 	route := &Route{
 		Path:      path,
 		Method:    http.MethodPatch,
@@ -99,10 +108,11 @@ func (r *Router) Patch(path string, handler any) {
 	route.initRouteID()
 	extractTypes(route)
 	r.extractParams(route)
-	r.Routes = append(r.Routes, *route)
+	r.Routes = append(r.Routes, route)
+	return route
 }
 
-func (r *Router) Delete(path string, handler any) {
+func (r *Router) Delete(path string, handler any) *Route {
 	route := &Route{
 		Path:      path,
 		Method:    http.MethodDelete,
@@ -112,10 +122,11 @@ func (r *Router) Delete(path string, handler any) {
 	route.initRouteID()
 	extractTypes(route)
 	r.extractParams(route)
-	r.Routes = append(r.Routes, *route)
+	r.Routes = append(r.Routes, route)
+	return route
 }
 
-func (r *Router) WebSocket(path string, handler any) {
+func (r *Router) WebSocket(path string, handler any) *Route {
 	route := &Route{
 		Path:      path,
 		Method:    http.MethodGet,
@@ -124,7 +135,8 @@ func (r *Router) WebSocket(path string, handler any) {
 	}
 	route.initRouteID()
 	r.extractParams(route)
-	r.Routes = append(r.Routes, *route)
+	r.Routes = append(r.Routes, route)
+	return route
 }
 
 func (r *Router) extractParams(route *Route) {
@@ -162,7 +174,7 @@ func extractTypes(route *Route) {
 	types.GlobalRouteParams[route.ID] = params
 }
 
-func (r *Router) callHandler(route Route, ctx *context.Context) {
+func (r *Router) callHandler(route *Route, ctx *context.Context) {
 	v := reflect.ValueOf(route.Handler)
 	args := make([]reflect.Value, len(route.ParamTypes))
 	for i, t := range route.ParamTypes {
@@ -179,7 +191,7 @@ func (r *Router) callHandler(route Route, ctx *context.Context) {
 	v.Call(args)
 }
 
-func (r *Router) match(req *http.Request, ctx *context.Context) (Route, bool) {
+func (r *Router) match(req *http.Request, ctx *context.Context) (*Route, bool) {
 	reqParts := strings.Split(strings.Trim(req.URL.Path, "/"), "/")
 	for _, route := range r.Routes {
 		if route.Method != req.Method {
@@ -205,7 +217,7 @@ func (r *Router) match(req *http.Request, ctx *context.Context) (Route, bool) {
 			return route, true
 		}
 	}
-	return Route{}, false
+	return nil, false
 }
 
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -222,6 +234,9 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	ctx.RouteID = route.ID
+	if !route.CheckRate(ctx) {
+		return
+	}
 	baseHandler := func(ctx *context.Context) {
 		r.callHandler(route, ctx)
 	}
@@ -243,14 +258,13 @@ func (r *Router) Health() {
 
 func (r *Router) ListRoutes() {
 	r.Get("/routes", func(ctx *context.Context) {
-
 		routes := []map[string]string{}
-
 		for _, route := range r.Routes {
 			routes = append(routes, map[string]string{
-				"path":   route.Path,
-				"method": route.Method,
-				"id":     route.ID,
+				"path":         route.Path,
+				"method":       route.Method,
+				"id":           route.ID,
+				"rate_limited": strconv.FormatBool(route.limitted),
 			})
 		}
 		ctx.Body(routes)
@@ -259,6 +273,37 @@ func (r *Router) ListRoutes() {
 
 func NewRouter() *Router {
 	r := new(Router)
-	r.Get("/metrics", func(ctx *context.Context) {})
 	return r
+}
+
+func (r *Route) RouteLimit(rl *rate.GlobalLimiter) {
+	r.limitted = true
+	r.limiter = rl
+}
+
+func (r *Route) CheckRate(ctx *context.Context) bool {
+
+	if r.limiter == nil || !r.limitted {
+		return true
+	}
+	limitFunc := r.limiter.LimitedFunc
+
+	ip, _, _ := net.SplitHostPort(ctx.Req.RemoteAddr)
+
+	for _, header := range []string{"X-Forwarded-For", "X-Real-IP"} {
+		found := ctx.Header().Get(header)
+		if found != "" {
+			ip = strings.TrimSpace(strings.Split(found, ",")[0])
+		}
+	}
+
+	if !r.limiter.Take(ip) {
+		if limitFunc != nil {
+			limitFunc()
+		} else {
+			ctx.TooManyRequests().String("Too many requests")
+		}
+		return false
+	}
+	return true
 }

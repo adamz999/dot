@@ -1,9 +1,14 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
+	"time"
 
 	"github.com/adamz999/dot/registry"
 	router "github.com/adamz999/dot/router"
@@ -11,8 +16,10 @@ import (
 
 type App struct {
 	router     *router.Router
+	server     *http.Server
 	startHooks []func()
 	errorHooks []func()
+	stopHooks  []func()
 }
 
 func (a *App) OnServerStart(hook func()) {
@@ -21,6 +28,10 @@ func (a *App) OnServerStart(hook func()) {
 
 func (a *App) OnServerError(hook func()) {
 	a.errorHooks = append(a.errorHooks, hook)
+}
+
+func (a *App) OnServerStop(hook func()) {
+	a.stopHooks = append(a.stopHooks, hook)
 }
 
 func New(router *router.Router) *App {
@@ -40,17 +51,48 @@ func (a *App) Start(port int) {
 		panic("router must be created before starting server")
 	}
 
-	for _, hook := range a.startHooks {
-		hook()
+	server := &http.Server{
+		Addr:    strPort,
+		Handler: a.router,
 	}
+
+	runStartHooks(a)
 
 	printStartupBanner(strPort, a)
 
-	if err := http.ListenAndServe(strPort, a.router); err != nil {
-		for _, hook := range a.startHooks {
-			hook()
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			runErrorHooks(a)
 		}
-		panic(fmt.Sprintf("server startup failed %v", err))
+	}()
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	<-sig
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	server.Shutdown(ctx)
+
+	runStopHooks(a)
+}
+
+func runStartHooks(a *App) {
+	for _, hook := range a.startHooks {
+		hook()
+	}
+}
+
+func runErrorHooks(a *App) {
+	for _, hook := range a.errorHooks {
+		hook()
+	}
+}
+
+func runStopHooks(a *App) {
+	for _, hook := range a.stopHooks {
+		hook()
 	}
 }
 
@@ -62,7 +104,7 @@ func printStartupBanner(port string, app *App) {
 	banner := `
 
 	Server started
-	Listening on :%s
+	Listening on %s
 	Routes registered: %d
 
 	`

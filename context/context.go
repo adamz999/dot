@@ -50,6 +50,10 @@ func (c *Context) BadRequest() *Context {
 	return c.Status(400)
 }
 
+func (c *Context) TooManyRequests() *Context {
+	return c.Status(429)
+}
+
 func (c *Context) InternalServerError() *Context {
 	return c.Status(500)
 }
