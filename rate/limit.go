@@ -12,6 +12,7 @@ type GlobalLimiter struct {
 	cap         float64
 	rate        float64
 	LimitedFunc func()
+	cooldown    float64
 }
 
 type Limiter struct {
@@ -20,26 +21,29 @@ type Limiter struct {
 	rate       float64
 	cap        float64
 	lastRefill time.Time
+	cooldown   float64
 }
 
-func newClientLimiter(cap float64, rates ...float64) *Limiter {
-	rate := float64(5)
-	if len(rates) > 0 {
-		rate = rates[0]
-	}
+func newClientLimiter(cap float64, rate float64, cooldown float64) *Limiter {
 	return &Limiter{
 		tokens:     cap,
 		rate:       rate,
 		cap:        cap,
 		lastRefill: time.Now(),
+		cooldown:   cooldown,
 	}
 }
 
-func NewLimiter(cap, rate float64) *GlobalLimiter {
+func NewLimiter(cap, rate float64, cooldowns ...float64) *GlobalLimiter {
+	cooldown := float64(1)
+	if len(cooldowns) > 0 {
+		cooldown = cooldowns[0]
+	}
 	return &GlobalLimiter{
 		limiters: make(map[string]*Limiter),
 		cap:      cap,
 		rate:     rate,
+		cooldown: cooldown,
 	}
 }
 
@@ -49,7 +53,7 @@ func (g *GlobalLimiter) Take(ip string) bool {
 	lim, ok := g.limiters[ip]
 
 	if !ok {
-		g.limiters[ip] = newClientLimiter(g.cap, g.rate)
+		g.limiters[ip] = newClientLimiter(g.cap, g.rate, g.cooldown)
 		lim = g.limiters[ip]
 	}
 
@@ -68,7 +72,7 @@ func (lim *Limiter) take() bool {
 
 	elapsed := time.Since(lim.lastRefill)
 
-	lim.tokens += elapsed.Seconds() * lim.rate
+	lim.tokens += (elapsed.Seconds() * lim.rate) / lim.cooldown
 	lim.tokens = math.Min(lim.tokens, lim.cap)
 	lim.lastRefill = now
 

@@ -38,13 +38,45 @@ type Route struct {
 	ParamTypes []reflect.Type
 	limitted   bool
 	limiter    *rate.GlobalLimiter
+	group      *RouteGroup
+}
+
+type RouteGroup struct {
+	Name        string
+	middlewares []Middleware
+}
+
+func (rg *RouteGroup) Use(mw Middleware) {
+	rg.middlewares = append(rg.middlewares, mw)
+}
+
+func (r *Router) Group(pfx string, register func()) *RouteGroup {
+	group := &RouteGroup{
+		Name: pfx,
+	}
+	routes := r.Routes
+	r.Routes = nil
+	register()
+	new := r.Routes
+	for _, route := range new {
+		route.group = group
+	}
+	r.Routes = append(routes, new...)
+	return group
 }
 
 func (r *Router) Use(mw Middleware) {
 	r.middlewares = append(r.middlewares, mw)
 }
 
-func (r *Router) applyMiddlewares(h HandlerFunc) HandlerFunc {
+func (rg *RouteGroup) applyGroupMiddlewares(h HandlerFunc) HandlerFunc {
+	for i := len(rg.middlewares) - 1; i >= 0; i-- {
+		h = rg.middlewares[i](h)
+	}
+	return h
+}
+
+func (r *Router) applyGlobalMiddlewares(h HandlerFunc) HandlerFunc {
 	for i := len(r.middlewares) - 1; i >= 0; i-- {
 		h = r.middlewares[i](h)
 	}
@@ -240,11 +272,16 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	baseHandler := func(ctx *context.Context) {
 		r.callHandler(route, ctx)
 	}
-	handler := r.applyMiddlewares(baseHandler)
+	globalHandler := r.applyGlobalMiddlewares(baseHandler)
 	if route.WebSocket {
 		conn := websocket.UpgradeWebsocket(ctx.Res, ctx.Req)
 		ctx.Connection = conn
 	}
+	handler := globalHandler
+	if route.group != nil {
+		handler = route.group.applyGroupMiddlewares(globalHandler)
+	}
+
 	handler(ctx)
 }
 

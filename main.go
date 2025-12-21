@@ -28,8 +28,6 @@ func main() {
 	app.Start(8080)
 }
 
-// cors config
-
 // request simulation helpers (allow devs to simulate requests to endpoints) also possibly use fmt time to see
 // how long the response takes to return and show time in ms for latency test
 
@@ -38,13 +36,9 @@ func main() {
 // Route grouping / namespaces (/api/v1/...) with shared middleware
 
 // much better error handling
-// lifecycle hooks for request started and response started similar to OnServerStart()
-// metrics like (method, path, status, latency).
-//
 
-/*
-type RouteLimiter struct {
-    limiters map[string]*rate.Limiter // key = routeID:clientIP
-    mu       sync.Mutex
-}
-*/
+// metrics like (method, path, status, latency).
+
+// benchmark against gin
+
+// structured jsopn logging
